@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Keypad</title>
+<style>
+  :root {
+    --amber: #c8a24a;
+    --red: #d33b3b;
+    --green: #3ad17a;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: #0a0a0c radial-gradient(ellipse at 50% 30%, #1c1c22 0%, #050506 70%);
+    color: #b9b4a8;
+    font-family: "Courier New", ui-monospace, monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+    padding: 24px;
+    user-select: none;
+    -webkit-user-select: none;
+    overflow: hidden;
+  }
+  h1 {
+    font-size: 15px;
+    letter-spacing: 0.5em;
+    font-weight: normal;
+    text-transform: uppercase;
+    color: #6e6a60;
+    margin: 0;
+    text-indent: 0.5em;
+  }
+  #display {
+    display: flex;
+    gap: 10px;
+  }
+  .cell {
+    width: 32px;
+    height: 46px;
+    border-bottom: 2px solid #33313a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 30px;
+    color: var(--amber);
+    text-shadow: 0 0 12px rgba(200, 162, 74, 0.55);
+    transition: color 0.15s, border-color 0.15s, text-shadow 0.15s;
+  }
+  .cell.filled { border-color: #5a5040; }
+  #display.wrong .cell {
+    color: var(--red);
+    border-color: var(--red);
+    text-shadow: 0 0 14px rgba(211, 59, 59, 0.8);
+  }
+  #display.right .cell {
+    color: var(--green);
+    border-color: var(--green);
+    text-shadow: 0 0 16px rgba(58, 209, 122, 0.8);
+  }
+  #display.wrong { animation: shake 0.45s; }
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    15% { transform: translateX(-10px); }
+    30% { transform: translateX(9px); }
+    45% { transform: translateX(-7px); }
+    60% { transform: translateX(5px); }
+    80% { transform: translateX(-3px); }
+  }
+  #status {
+    height: 18px;
+    font-size: 13px;
+    letter-spacing: 0.35em;
+    text-transform: uppercase;
+    color: transparent;
+  }
+  #status.wrong { color: var(--red); }
+  #status.right { color: var(--green); }
+  #keypad {
+    display: grid;
+    grid-template-columns: repeat(3, 84px);
+    gap: 14px;
+  }
+  .key {
+    height: 74px;
+    border: 1px solid #2e2c34;
+    border-radius: 6px;
+    background: linear-gradient(#17161b, #100f13);
+    color: #a9a396;
+    font-family: inherit;
+    font-size: 26px;
+    box-shadow: inset 0 1px 0 #2a2833, 0 2px 6px rgba(0,0,0,0.6);
+    transition: background 0.08s, color 0.08s;
+  }
+  .key:active {
+    background: #26232c;
+    color: var(--amber);
+  }
+  .key.wide { grid-column: span 2; }
+  #clue {
+    display: none;
+    text-align: center;
+  }
+  #clue.show { display: block; animation: fade 0.9s ease; }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+  #clue .code {
+    font-size: 62px;
+    letter-spacing: 0.18em;
+    color: var(--green);
+    text-shadow: 0 0 24px rgba(58, 209, 122, 0.7);
+    text-indent: 0.18em;
+  }
+  body.solved #keypad, body.solved h1, body.solved #display, body.solved #status { display: none; }
+</style>
+</head>
+<body>
+  <h1>Indtast kode</h1>
+  <div id="display"></div>
+  <div id="status"></div>
+
+  <div id="keypad">
+    <button class="key" data-d="1">1</button>
+    <button class="key" data-d="2">2</button>
+    <button class="key" data-d="3">3</button>
+    <button class="key" data-d="4">4</button>
+    <button class="key" data-d="5">5</button>
+    <button class="key" data-d="6">6</button>
+    <button class="key" data-d="7">7</button>
+    <button class="key" data-d="8">8</button>
+    <button class="key" data-d="9">9</button>
+    <button class="key wide" data-d="0">0</button>
+    <button class="key" id="back">&#9003;</button>
+  </div>
+
+  <div id="clue">
+    <div class="code">0856</div>
+  </div>
+
+<script>
+  var ANSWER = "945113986";
+  var display = document.getElementById("display");
+  var status = document.getElementById("status");
+  var clue = document.getElementById("clue");
+  var cells = [];
+  var entered = "";
+  var locked = false;
+
+  for (var i = 0; i < ANSWER.length; i++) {
+    var c = document.createElement("div");
+    c.className = "cell";
+    display.appendChild(c);
+    cells.push(c);
+  }
+
+  function render() {
+    for (var i = 0; i < cells.length; i++) {
+      cells[i].textContent = entered[i] || "";
+      cells[i].className = entered[i] ? "cell filled" : "cell";
+    }
+  }
+
+  function press(d) {
+    if (locked || entered.length >= ANSWER.length) { return; }
+    entered += d;
+    render();
+    if (entered.length === ANSWER.length) { check(); }
+  }
+
+  function back() {
+    if (locked) { return; }
+    entered = entered.slice(0, -1);
+    render();
+  }
+
+  function check() {
+    locked = true;
+    if (entered === ANSWER) {
+      display.className = "right";
+      status.className = "right";
+      status.textContent = "Adgang godkendt";
+      setTimeout(function () {
+        document.body.className = "solved";
+        clue.className = "show";
+      }, 900);
+    } else {
+      display.className = "wrong";
+      status.className = "wrong";
+      status.textContent = "Afvist";
+      setTimeout(function () {
+        entered = "";
+        render();
+        display.className = "";
+        status.className = "";
+        status.textContent = "";
+        locked = false;
+      }, 900);
+    }
+  }
+
+  document.getElementById("keypad").addEventListener("click", function (e) {
+    var btn = e.target.closest("button");
+    if (!btn) { return; }
+    if (btn.id === "back") { back(); } else { press(btn.dataset.d); }
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key >= "0" && e.key <= "9") { press(e.key); }
+    if (e.key === "Backspace") { back(); }
+  });
+
+  render();
+</script>
+</body>
+</html>
