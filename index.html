@@ -19,9 +19,9 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: 28px;
-    padding: 24px;
+    padding: 12vh 24px 24px;
     user-select: none;
     -webkit-user-select: none;
     overflow: hidden;
@@ -52,6 +52,8 @@
     transition: color 0.15s, border-color 0.15s, text-shadow 0.15s;
   }
   .cell.filled { border-color: #5a5040; }
+  .cell.active { border-color: var(--amber); animation: blink 1.1s steps(1) infinite; }
+  @keyframes blink { 50% { border-color: #33313a; } }
   #display.wrong .cell {
     color: var(--red);
     border-color: var(--red);
@@ -71,6 +73,14 @@
     60% { transform: translateX(5px); }
     80% { transform: translateX(-3px); }
   }
+  #ghost {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    border: 0;
+    padding: 0;
+  }
   #status {
     height: 18px;
     font-size: 13px;
@@ -80,27 +90,13 @@
   }
   #status.wrong { color: var(--red); }
   #status.right { color: var(--green); }
-  #keypad {
-    display: grid;
-    grid-template-columns: repeat(3, 84px);
-    gap: 14px;
+  #hint {
+    font-size: 12px;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: #4a4740;
   }
-  .key {
-    height: 74px;
-    border: 1px solid #2e2c34;
-    border-radius: 6px;
-    background: linear-gradient(#17161b, #100f13);
-    color: #a9a396;
-    font-family: inherit;
-    font-size: 26px;
-    box-shadow: inset 0 1px 0 #2a2833, 0 2px 6px rgba(0,0,0,0.6);
-    transition: background 0.08s, color 0.08s;
-  }
-  .key:active {
-    background: #26232c;
-    color: var(--amber);
-  }
-  .key.wide { grid-column: span 2; }
+  #hint.hide { visibility: hidden; }
   #clue {
     display: none;
     text-align: center;
@@ -114,105 +110,146 @@
     text-shadow: 0 0 24px rgba(58, 209, 122, 0.7);
     text-indent: 0.18em;
   }
-  body.solved #keypad, body.solved h1, body.solved #display, body.solved #status { display: none; }
+  #next {
+    display: none;
+    margin-top: 42px;
+    padding: 16px 30px;
+    border: 1px solid #3a3742;
+    border-radius: 6px;
+    background: linear-gradient(#17161b, #100f13);
+    color: #8d8879;
+    font-family: inherit;
+    font-size: 15px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    box-shadow: inset 0 1px 0 #2a2833, 0 2px 6px rgba(0,0,0,0.6);
+  }
+  #next.show { display: inline-block; }
+  #next:active { background: #26232c; color: var(--amber); }
+  body.solved h1, body.solved #display, body.solved #status, body.solved #hint { display: none; }
 </style>
 </head>
 <body>
-  <h1>Indtast kode</h1>
+  <h1 id="prompt">Indtast kode</h1>
   <div id="display"></div>
+  <input id="ghost" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
   <div id="status"></div>
-
-  <div id="keypad">
-    <button class="key" data-d="1">1</button>
-    <button class="key" data-d="2">2</button>
-    <button class="key" data-d="3">3</button>
-    <button class="key" data-d="4">4</button>
-    <button class="key" data-d="5">5</button>
-    <button class="key" data-d="6">6</button>
-    <button class="key" data-d="7">7</button>
-    <button class="key" data-d="8">8</button>
-    <button class="key" data-d="9">9</button>
-    <button class="key wide" data-d="0">0</button>
-    <button class="key" id="back">&#9003;</button>
-  </div>
+  <div id="hint">Tryk p&aring; sk&aelig;rmen for at &aring;bne tastaturet</div>
 
   <div id="clue">
-    <div class="code">0856</div>
+    <div class="code"></div>
+    <button id="next">Videre til n&aelig;ste opgave</button>
   </div>
 
 <script>
-  var ANSWER = "945113986";
+  var STAGES = [
+    { answer: "945113986", clue: "0856", mode: "digits", prompt: "Indtast kode" },
+    { answer: "krydderier", clue: "0812", mode: "letters", prompt: "Indtast kodeord" }
+  ];
+
   var display = document.getElementById("display");
-  var status = document.getElementById("status");
+  var statusLine = document.getElementById("status");
+  var promptLine = document.getElementById("prompt");
+  var hint = document.getElementById("hint");
   var clue = document.getElementById("clue");
+  var clueCode = clue.querySelector(".code");
+  var next = document.getElementById("next");
+  var ghost = document.getElementById("ghost");
+
+  var index = 0;
+  var stage = STAGES[0];
   var cells = [];
   var entered = "";
   var locked = false;
 
-  for (var i = 0; i < ANSWER.length; i++) {
-    var c = document.createElement("div");
-    c.className = "cell";
-    display.appendChild(c);
-    cells.push(c);
+  function start(i) {
+    index = i;
+    stage = STAGES[i];
+    entered = "";
+    locked = false;
+    cells = [];
+    display.innerHTML = "";
+    display.className = "";
+    statusLine.className = "";
+    statusLine.textContent = "";
+    clue.className = "";
+    next.className = "";
+    document.body.className = "";
+    promptLine.textContent = stage.prompt;
+    ghost.value = "";
+    ghost.inputMode = stage.mode === "digits" ? "numeric" : "text";
+    for (var n = 0; n < stage.answer.length; n++) {
+      var c = document.createElement("div");
+      c.className = "cell";
+      display.appendChild(c);
+      cells.push(c);
+    }
+    render();
   }
 
   function render() {
     for (var i = 0; i < cells.length; i++) {
-      cells[i].textContent = entered[i] || "";
-      cells[i].className = entered[i] ? "cell filled" : "cell";
+      var ch = entered[i] || "";
+      cells[i].textContent = stage.mode === "letters" ? ch.toUpperCase() : ch;
+      cells[i].className = ch ? "cell filled" : "cell";
     }
-  }
-
-  function press(d) {
-    if (locked || entered.length >= ANSWER.length) { return; }
-    entered += d;
-    render();
-    if (entered.length === ANSWER.length) { check(); }
-  }
-
-  function back() {
-    if (locked) { return; }
-    entered = entered.slice(0, -1);
-    render();
+    if (!locked && entered.length < cells.length) {
+      cells[entered.length].className = "cell active";
+    }
+    hint.className = entered.length > 0 || locked ? "hide" : "";
   }
 
   function check() {
     locked = true;
-    if (entered === ANSWER) {
+    render();
+    if (entered === stage.answer) {
       display.className = "right";
-      status.className = "right";
-      status.textContent = "Adgang godkendt";
+      statusLine.className = "right";
+      statusLine.textContent = "Adgang godkendt";
+      ghost.blur();
       setTimeout(function () {
         document.body.className = "solved";
+        clueCode.textContent = stage.clue;
         clue.className = "show";
+        if (index < STAGES.length - 1) { next.className = "show"; }
       }, 900);
     } else {
       display.className = "wrong";
-      status.className = "wrong";
-      status.textContent = "Afvist";
+      statusLine.className = "wrong";
+      statusLine.textContent = "Afvist";
       setTimeout(function () {
         entered = "";
-        render();
-        display.className = "";
-        status.className = "";
-        status.textContent = "";
+        ghost.value = "";
         locked = false;
+        display.className = "";
+        statusLine.className = "";
+        statusLine.textContent = "";
+        render();
       }, 900);
     }
   }
 
-  document.getElementById("keypad").addEventListener("click", function (e) {
-    var btn = e.target.closest("button");
-    if (!btn) { return; }
-    if (btn.id === "back") { back(); } else { press(btn.dataset.d); }
+  document.addEventListener("click", function (e) {
+    if (e.target.id === "next" || locked) { return; }
+    ghost.focus();
   });
 
-  document.addEventListener("keydown", function (e) {
-    if (e.key >= "0" && e.key <= "9") { press(e.key); }
-    if (e.key === "Backspace") { back(); }
+  ghost.addEventListener("input", function () {
+    if (locked) { return; }
+    var allowed = stage.mode === "digits" ? /[^0-9]/g : /[^a-zæøå]/g;
+    var v = ghost.value.toLowerCase().replace(allowed, "").slice(0, stage.answer.length);
+    ghost.value = v;
+    entered = v;
+    render();
+    if (entered.length === stage.answer.length) { check(); }
   });
 
-  render();
+  next.addEventListener("click", function () {
+    start(index + 1);
+    ghost.focus();
+  });
+
+  start(0);
 </script>
 </body>
 </html>
